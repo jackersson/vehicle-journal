@@ -1,11 +1,10 @@
 import csv
+from copy import deepcopy
 from datetime import datetime
 
 import pandas as pd
 import streamlit as st
 
-# from st_aggrid import AgGrid
-# from st_aggrid.grid_options_builder import GridOptionsBuilder
 
 st.set_page_config(layout="wide")
 
@@ -73,8 +72,11 @@ containers_size = [1] * len(columns)
 
 if 'events' not in st.session_state:
     st.session_state['events'] = []
-events = st.session_state['events']
 
+events = st.session_state['events']
+vehicles = {}
+
+st.header("Транспортні засоби")
 with open("vehicles.csv", "r", newline='') as csv_file:
     reader = csv.DictReader(csv_file)
     containers = st.columns(containers_size)
@@ -112,16 +114,26 @@ with open("vehicles.csv", "r", newline='') as csv_file:
                 containers[i].markdown(t, unsafe_allow_html=True)
             else:
                 containers[i].write(row[column])
+
+        vehicles[idx] = [row[c] for c in VehicleJournalTable.items()]
         st.markdown("""---""")
 
 
-df = pd.DataFrame(events)
+full_events = []
+for e in events:
+    vehicle_info = deepcopy(vehicles[e[0]])
+    vehicle_info[-1] = e[-1]
+    vehicle_info[-2] = e[-2]
+    full_events.append(vehicle_info)
+
+st.header("Журнал")
+df = pd.DataFrame(full_events, columns=VehicleJournalTable.items())
 st.dataframe(df)
-# add this
 
-# table = pd.read_csv("vehicles.csv")
-# gb = GridOptionsBuilder.from_dataframe(table)
-# gb.configure_pagination()
-# gridOptions = gb.build()
-
-# AgGrid(table, gridOptions=gridOptions)
+st.download_button(
+   "Завантажити",
+   df.to_csv().encode('utf-8'),
+   f"events_{datetime.now().strftime('%d-%m-%Y_%H-%M-%S')}.csv",
+   "text/csv",
+   key='download-csv'
+)
