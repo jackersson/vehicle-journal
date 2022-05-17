@@ -160,7 +160,9 @@ def main():
 
     local_css("style.css")
 
-    log_file = Path(f"logs/log_{datetime.now().strftime('%d-%m-%Y')}.csv")
+    # log_file = Path(f"logs/log_{datetime.now().strftime('%d-%m-%Y')}.csv")
+    log_file = Path(f"logs/log.csv")
+
     log_file.parent.mkdir(parents=True, exist_ok=True)
     log_file.touch(exist_ok=True)
 
@@ -263,7 +265,6 @@ def main():
 
         st.markdown("""---""")
 
-    st.header("Журнал")
 
     # convert `events` to dataframe
     events_df = []
@@ -288,6 +289,8 @@ def main():
     df.reset_index(drop=True, inplace=True)
 
     df.to_csv(str(log_file), index=False)
+
+    st.header(f"Журнал [{len(df)}]")
 
     # convert to Excel and Save to file
     with io.BytesIO() as buffer:
