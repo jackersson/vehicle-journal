@@ -1,12 +1,17 @@
+from asyncio import events
 from collections import defaultdict
 import typing as typ
 import io
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+
+
+datetime_format = "%H:%M:%S %d.%m.%Y"
 
 
 def local_css(file_name):
@@ -31,7 +36,7 @@ class Controls:
     CHECK_IN = "Повернулась"
 
     HEADER = "Транспортні засоби"
-    UPLOAD_FILE = "Обрати файл"
+    UPLOAD_FILE = "Обрати файл з транспортними засобами"
     DOWNLOAD = "Завантажити (журнал)"
     CLEAR_ALL = "Очистити (все)"
     CLEAR_CHECKED_IN = "Очистити (повернулись)"
@@ -79,11 +84,13 @@ class VehicleLogs:
         self._logs.append(VehicleLogItem().check_out(time))
 
     def clear_checked_in(self):
-        logs = [self.last] if self.last else []
-        self._logs = logs + [l for l in self._logs[:-1] if not l.checked_in]
+        self._logs = [l for l in self._logs if not l.checked_in]
 
     def clear(self):
-        self._logs = [self.last] if self.last else []
+        self._logs = []
+
+    def add(self, item: VehicleLogItem):
+        self._logs.append(item)
 
     @property
     def check_in_time(self):
@@ -101,6 +108,12 @@ class VehicleLogs:
     def last(self):
         return self._logs[-1] if len(self._logs) > 0 else None
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}[logs={len(self)}]"
+
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}[logs={len(self)}]"
+
     def __len__(self):
         return len(self._logs)
 
@@ -109,48 +122,50 @@ class VehicleLogs:
             yield l
 
 
+def sort_by_check_out_time(df: pd.DataFrame, ascending: bool = False):
+    check_out_df_column = f"{VehicleJournalTable.TIME_CHECK_OUT}_dt"
+    df[check_out_df_column] = pd.to_datetime(df[VehicleJournalTable.TIME_CHECK_OUT])
+    df = df.sort_values(by=check_out_df_column, ascending=ascending)
+    df.drop(columns=check_out_df_column, inplace=True)
+    return df
+
+# @st.cache(allow_output_mutation=True)
+def load_events(filename):
+    events = defaultdict(VehicleLogs)
+
+    try:
+        df = pd.read_csv(filename)
+        df = sort_by_check_out_time(df, ascending=True)
+        for _, row in df.iterrows():
+            try:
+                time_check_in = datetime.strptime(str(row[VehicleJournalTable.TIME_CHECK_IN]),
+                                                  datetime_format)
+            except ValueError as e:
+                time_check_in = None
+            try:
+                time_check_out = datetime.strptime(str(row[VehicleJournalTable.TIME_CHECK_OUT]),
+                                                   datetime_format)
+            except ValueError as e:
+                time_check_out = None
+
+            events[row[VehicleJournalTable.ID]].add(VehicleLogItem(time_check_in,
+                                                                   time_check_out))
+    except pd.errors.EmptyDataError as e:
+        pass
+    return events
+
+
 def main():
-    datetime_format = "%H:%M:%S %d.%m.%Y"
 
     st.set_page_config(layout="wide")
 
     local_css("style.css")
 
-    # load events from history (cache)
-    if 'events' not in st.session_state:
-        st.session_state['events'] = defaultdict(VehicleLogs)
-    events = st.session_state['events']
+    log_file = Path(f"logs/log_{datetime.now().strftime('%d-%m-%Y')}.csv")
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    log_file.touch(exist_ok=True)
 
-    # column size for `ui element`
-    ui_elements = {
-        Controls.HEADER: 5,
-        Controls.DOWNLOAD: 1,
-        Controls.CLEAR_ALL: 1,
-        Controls.CLEAR_CHECKED_IN: 1,
-    }
-
-    # prepare containers
-    ordered_elements = [Controls.HEADER,
-                        Controls.DOWNLOAD,
-                        Controls.CLEAR_ALL, Controls.CLEAR_CHECKED_IN]
-    elements_indexes = {elem: i for i, elem in enumerate(ordered_elements)}
-    ctrl_containers = st.columns([ui_elements[elem] for elem in ordered_elements])
-
-    # header title
-    elem_name = Controls.HEADER
-    ctrl_containers[elements_indexes[elem_name]].header(elem_name)
-
-    # clear all button
-    elem_name = Controls.CLEAR_ALL
-    if ctrl_containers[elements_indexes[elem_name]].button(elem_name):
-        for e in events.values():
-            e.clear()
-
-    # clear (checked-in) button
-    elem_name = Controls.CLEAR_CHECKED_IN
-    if ctrl_containers[elements_indexes[elem_name]].button(elem_name):
-        for e in events.values():
-            e.clear_checked_in()
+    st.header(Controls.HEADER)
 
     # read vehicles from file
     uploaded_file = st.sidebar.file_uploader(Controls.UPLOAD_FILE, type="xlsx")
@@ -162,6 +177,23 @@ def main():
     else:
         return
 
+    # load events from history (cache)
+    # if 'events' not in st.session_state:
+    events = load_events(str(log_file))
+
+    st.sidebar.markdown("---")
+
+    btn_load = st.sidebar.empty()
+
+    # clear all button
+    if st.sidebar.button(Controls.CLEAR_ALL):
+        for e in events.values():
+            e.clear()
+
+    # clear (checked-in) button
+    if st.sidebar.button(Controls.CLEAR_CHECKED_IN):
+        for e in events.values():
+            e.clear_checked_in()
 
     skip_columns = set([VehicleJournalTable.GROUP_OF_OPERATION,
                         VehicleJournalTable.VEHICLE_PURPOSE])
@@ -190,13 +222,14 @@ def main():
     indexes = {c:i for i, c in enumerate(display_columns)}
 
     vehicles_data = vehicles[short_data_columns]
-    for idx, row in vehicles_data.iterrows():
+    for _, row in vehicles_data.iterrows():
+        idx = row[VehicleJournalTable.ID]
         containers = st.columns(sizes)
 
         # check-out button p
         column_type = Controls.CHECK_OUT
         if containers[indexes[column_type]].button(column_type,
-                                               key=f"{column_type}:{idx}"):
+                                                   key=f"{column_type}:{idx}"):
             events[idx].check_out()
 
         column_type = Controls.CHECK_IN
@@ -235,8 +268,8 @@ def main():
 
     # convert `events` to dataframe
     events_df = []
-    for idx, row in vehicles[data_columns].iterrows():
-        logs = events[idx]
+    for _, row in vehicles[data_columns].iterrows():
+        logs = events[row[VehicleJournalTable.ID]]
         for record in logs:
             info = deepcopy(row)
             info[VehicleJournalTable.TIME_CHECK_IN] = "N/A"
@@ -252,11 +285,10 @@ def main():
     df = pd.DataFrame(events_df, columns=data_columns)
 
     # sort by time
-    check_out_df_column = f"{VehicleJournalTable.TIME_CHECK_OUT}_dt"
-    df[check_out_df_column] = pd.to_datetime(df[VehicleJournalTable.TIME_CHECK_OUT])
-    df = df.sort_values(by=check_out_df_column, ascending=False)
-    df.drop(columns=check_out_df_column, inplace=True)
+    df = sort_by_check_out_time(df)
     df.reset_index(drop=True, inplace=True)
+
+    df.to_csv(str(log_file), index=False)
 
     # convert to Excel and Save to file
     with io.BytesIO() as buffer:
@@ -271,7 +303,7 @@ def main():
                 writer.sheets['Журнал'].set_column(col_idx, col_idx, column_width)
 
         elem_name = Controls.DOWNLOAD
-        ctrl_containers[elements_indexes[elem_name]].download_button(
+        btn_load.download_button(
             label=elem_name,
             data=buffer.getvalue(),
             file_name=f"events_{datetime.now().strftime('%d-%m-%Y_%H-%M-%S')}.xlsx",
