@@ -1,4 +1,3 @@
-from asyncio import events
 from collections import defaultdict
 import typing as typ
 import io
