@@ -24,17 +24,13 @@ import tomlkit
 
 HERE = pathlib.Path("__file__").parent.resolve()
 REPO_ROOT = HERE.parent
-PYPROJECT_TOML_PATH = REPO_ROOT.joinpath("pyproject.toml")
-LICENSE_PATH = REPO_ROOT.joinpath("LICENSE")
-
-DIST = REPO_ROOT.joinpath("dist")
 
 BUILD = HERE.joinpath("build")
 WHEELS = BUILD.joinpath("wheels")
 
 DOWNLOADS = BUILD.joinpath("downloads")
 PYTHON_EMBED_URL = (
-    "https://www.python.org/ftp/python/3.7.9/python-3.7.9-embed-amd64.zip"
+    "https://www.python.org/ftp/python/3.8.10/python-3.8.10-embed-amd64.zip"
 )
 PYTHON_EMBED_PATH = DOWNLOADS.joinpath("python-embed.zip")
 GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
@@ -68,7 +64,7 @@ def main():
     _build_and_collate_wheels(prepend)
     _download_and_extract_embedded_python()
     _get_pip(prepend)
-    # _install_pymedphys_in_offline_mode(prepend)
+    _install_packages_offline_mode(prepend)
     _create_compressed_python_embed()
 
     _run_pyinstaller_to_build_the_exe(prepend, append, one_file_mode)
@@ -114,7 +110,7 @@ def _build_and_collate_wheels(prepend):
     """
 
     subprocess.check_call(
-        f"{prepend}pip wheel -r requirements-deploy.txt -w {WHEELS}",
+        f"{prepend}pip wheel -r requirements.txt -w {WHEELS}",
         shell=True,
         cwd=REPO_ROOT,
     )
@@ -127,12 +123,6 @@ def _build_and_collate_wheels(prepend):
         shell=True,
         cwd=WHEELS,
     )
-
-    subprocess.check_call("poetry build -f wheel", shell=True, cwd=REPO_ROOT)
-
-    pymedphys_wheel = f"pymedphys-py3-none-any.whl"
-
-    shutil.copy(DIST.joinpath(pymedphys_wheel), WHEELS.joinpath(pymedphys_wheel))
 
 
 def _download_and_extract_embedded_python():
@@ -184,7 +174,7 @@ def _get_pip(prepend):
     )
 
 
-def _install_pymedphys_in_offline_mode(prepend):
+def _install_packages_offline_mode(prepend):
     """Utilising the wheels downloaded prior, install PyMedPhys.
 
     Note
@@ -195,7 +185,7 @@ def _install_pymedphys_in_offline_mode(prepend):
 
     """
     subprocess.check_call(
-        f"{prepend}python.exe -m pip install pymedphys[user,tests] --no-index --find-links file://{WHEELS}",
+        f"{prepend}python.exe -m pip install -r requirements.txt --no-index --find-links file://{WHEELS}",
         shell=True,
         cwd=BUILD_PYTHON_EMBED,
     )
@@ -224,7 +214,6 @@ def _run_pyinstaller_to_build_the_exe(prepend, append, one_file_mode):
     subprocess.check_call(
         (
             f"{prepend}pyinstaller {pyinstaller_script}"
-            f' --add-data "{LICENSE_PATH};data"'
             f' --add-data "{BUILD_PYTHON_EMBED_XZTAR.name};data"'
             f' --add-data "{pymedphys_bat};data"{append}'
         ),

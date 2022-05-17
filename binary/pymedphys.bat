@@ -62,4 +62,4 @@
 
 @REM ==========================================================================
 
-"%~dp0\python-embed\python" -m pymedphys %*
+"%~dp0\python-embed\python" -m streamlit %*
