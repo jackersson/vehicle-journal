@@ -209,10 +209,11 @@ def main():
         vehicles.insert(list(vehicles.columns).index(column),
                         control, [bool(i)] * len(vehicles))
 
+    skip_columns.add(VehicleJournalTable.ID)
     display_columns = [c for c in vehicles.columns if c not in skip_columns]
 
     # print header of table
-    sizes = [1] + [3] * (len(display_columns) - 1)
+    sizes = [1] * len(display_columns)
     containers = st.columns(sizes)
     for i, column in enumerate(display_columns):
         containers[i].write(column.capitalize())
@@ -240,6 +241,9 @@ def main():
 
         color = 'green' if events[idx].checked_in else 'red'
         for col in vehicles_data.columns:
+            if col in skip_columns:
+                continue
+
             text = row[col]
             if col == VehicleJournalTable.TIME_CHECK_IN:
                 text = "_"
