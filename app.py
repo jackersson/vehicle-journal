@@ -319,6 +319,8 @@ def main():
 
     # display table
     df.reset_index(drop=True, inplace=True)
+    for c in df.columns:
+        df[c] = df[c].astype(str)
     st.dataframe(df[short_data_columns])
 
 main()
