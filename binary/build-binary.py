@@ -20,7 +20,6 @@ import urllib.request
 import zipfile
 import functools
 
-import tomlkit
 
 HERE = pathlib.Path("__file__").parent.resolve()
 REPO_ROOT = HERE.parent
@@ -117,12 +116,12 @@ def _build_and_collate_wheels(prepend):
 
     # Recent dev commits remove pylinac gui, delete production pylinac
     # wheel and test with a recent development commit.
-    WHEELS.joinpath("pylinac-2.3.2-py3-none-any.whl").unlink()
-    subprocess.check_call(
-        f"{prepend}python -m pip wheel git+https://github.com/jrkerns/pylinac.git@446d4cf7fd1999ac1c418765db329f394515d5c0",
-        shell=True,
-        cwd=WHEELS,
-    )
+    # WHEELS.joinpath("pylinac-2.3.2-py3-none-any.whl").unlink()
+    # subprocess.check_call(
+    #     f"{prepend}python -m pip wheel git+https://github.com/jrkerns/pylinac.git@446d4cf7fd1999ac1c418765db329f394515d5c0",
+    #     shell=True,
+    #     cwd=WHEELS,
+    # )
 
 
 def _download_and_extract_embedded_python():
