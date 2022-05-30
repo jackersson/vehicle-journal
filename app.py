@@ -18,6 +18,13 @@ def local_css(file_name):
         st.markdown('<style>{}</style>'.format(f.read()), unsafe_allow_html=True)
 
 
+def format_center(text: str):
+    return f"<div style='text-align: center'>{text}</div>"
+
+def format_style(text: str, color: str):
+    return f"<span class='highlight {color}'>{text}</span>"
+
+
 class VehicleJournalTable:
     ID = "№"
     VEHICLE_MODEL = "марка машини"
@@ -135,6 +142,7 @@ def load_events(filename):
     try:
         df = pd.read_csv(filename)
         df = sort_by_check_out_time(df, ascending=True)
+        df.columns = df.columns.str.lower()
         for _, row in df.iterrows():
             try:
                 time_check_in = datetime.strptime(str(row[VehicleJournalTable.TIME_CHECK_IN]),
@@ -147,7 +155,7 @@ def load_events(filename):
             except ValueError as e:
                 time_check_out = None
 
-            events[row[VehicleJournalTable.ID]].add(VehicleLogItem(time_check_in,
+            events[row[VehicleJournalTable.LICENCE_PLATE]].add(VehicleLogItem(time_check_in,
                                                                    time_check_out))
     except pd.errors.EmptyDataError as e:
         pass
@@ -166,17 +174,26 @@ def main():
     log_file.parent.mkdir(parents=True, exist_ok=True)
     log_file.touch(exist_ok=True)
 
-    st.header(Controls.HEADER)
+    # st.header(Controls.HEADER)
 
     # read vehicles from file
     uploaded_file = st.sidebar.file_uploader(Controls.UPLOAD_FILE, type="xlsx")
-    if uploaded_file:
-        vehicles = pd.read_excel(uploaded_file,
-                                 converters={VehicleJournalTable.ID: int})
 
+    header = f"Наряд №0001 на {datetime.now().strftime('%d.%m.%Y')}"
+    columns_name_mapping = {}
+    if uploaded_file:
+        header = pd.read_excel(uploaded_file, usecols=[0], nrows=1).columns[0]
+        vehicles = pd.read_excel(uploaded_file,
+                                 converters={VehicleJournalTable.ID: int},
+                                 skiprows=1)
+        columns_name_mapping = {col: col.lower() for col in vehicles.columns}
+        vehicles.rename(columns=columns_name_mapping, inplace = True)
         vehicles.set_index(VehicleJournalTable.ID)
     else:
         return
+
+    # st.markdown(f"<h1 style='text-align: center'> {header} </h1>", unsafe_allow_html=True)
+    st.header(header)
 
     # load events from history (cache)
     # if 'events' not in st.session_state:
@@ -216,7 +233,8 @@ def main():
     sizes = [1] * len(display_columns)
     containers = st.columns(sizes)
     for i, column in enumerate(display_columns):
-        containers[i].write(column.capitalize())
+        # containers[i].write(column.capitalize())
+        containers[i].markdown(format_center(column.capitalize()), unsafe_allow_html=True)
     st.markdown("""---""")
 
     # print table's rows
@@ -225,7 +243,7 @@ def main():
 
     vehicles_data = vehicles[short_data_columns]
     for _, row in vehicles_data.iterrows():
-        idx = row[VehicleJournalTable.ID]
+        idx = row[VehicleJournalTable.LICENCE_PLATE]
         containers = st.columns(sizes)
 
         # check-out button p
@@ -245,27 +263,29 @@ def main():
                 continue
 
             text = row[col]
+
+
             if col == VehicleJournalTable.TIME_CHECK_IN:
                 text = "_"
+
                 if events[idx].check_in_time:
                     text = events[idx].check_in_time.strftime(datetime_format)
-                    text = f"<div><span class='highlight {color}'>{text}</span> </div>"
+                    text = format_style(text, color)
             elif col == VehicleJournalTable.TIME_CHECK_OUT:
                 text = "_"
                 if events[idx].check_out_time:
                     text = events[idx].check_out_time.strftime(datetime_format)
                     if not events[idx].checked_in:
-                        text = f"<div><span class='highlight {color}'>{text}</span> </div>"
-
+                        text = format_style(text, color)
             if len(events[idx]) > 0:
                 # we highlight only specific columns
                 if col not in [Controls.CHECK_IN,
                                Controls.CHECK_OUT,
                                VehicleJournalTable.TIME_CHECK_OUT,
                                VehicleJournalTable.TIME_CHECK_IN]:
-                    text = f"<div><span class='highlight {color}'>{text}</span> </div>"
+                    text = format_style(text, color)
 
-            containers[indexes[col]].markdown(text, unsafe_allow_html=True)
+            containers[indexes[col]].markdown(format_center(text), unsafe_allow_html=True)
 
         st.markdown("""---""")
 
@@ -273,7 +293,7 @@ def main():
     # convert `events` to dataframe
     events_df = []
     for _, row in vehicles[data_columns].iterrows():
-        logs = events[row[VehicleJournalTable.ID]]
+        logs = events[row[VehicleJournalTable.LICENCE_PLATE]]
         for record in logs:
             info = deepcopy(row)
             info[VehicleJournalTable.TIME_CHECK_IN] = "N/A"
@@ -300,6 +320,8 @@ def main():
     with io.BytesIO() as buffer:
         with pd.ExcelWriter(buffer) as writer:
             # Convert the dataframe to an XlsxWriter Excel object.
+
+            df.rename(columns={v: k for k, v in columns_name_mapping.items()}, inplace=True)
             df.to_excel(writer, index=False, sheet_name='Журнал')
 
             # Auto-adjust columns' width
@@ -318,10 +340,11 @@ def main():
         )
 
     # display table
+    inv_columns_name_mapping = {v: k for k, v in columns_name_mapping.items()}
     df.reset_index(drop=True, inplace=True)
     for c in df.columns:
         df[c] = df[c].astype(str)
-    st.dataframe(df[short_data_columns])
+    st.dataframe(df[[inv_columns_name_mapping[c] for c in short_data_columns]])
 
 main()
 
