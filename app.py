@@ -162,6 +162,10 @@ def load_events(filename):
     return events
 
 
+def clear_confirmation_text():
+    st.session_state["clear_confirmation_text"] = ""
+
+
 def main():
 
     st.set_page_config(layout="wide")
@@ -204,9 +208,19 @@ def main():
     btn_load = st.sidebar.empty()
 
     # clear all button
-    if st.sidebar.button(Controls.CLEAR_ALL):
+    st.sidebar.markdown("""---""")
+    clear_confirmation = '1111'
+    text = st.sidebar.text_input(
+        f"Підвердіть операцію ввівши: {clear_confirmation}",
+        max_chars=4,
+        key='clear_confirmation_text')
+    if st.sidebar.button(Controls.CLEAR_ALL,
+                         disabled=(clear_confirmation not in text.lower()),
+                         on_click=clear_confirmation_text):
         for e in events.values():
             e.clear()
+
+    st.sidebar.markdown("""---""")
 
     # clear (checked-in) button
     if st.sidebar.button(Controls.CLEAR_CHECKED_IN):
@@ -229,6 +243,20 @@ def main():
     skip_columns.add(VehicleJournalTable.ID)
     display_columns = [c for c in vehicles.columns if c not in skip_columns]
 
+    lplate_search_cont, _, page_prev, page_num, page_next, items_per_page_cont = \
+        st.columns([5, 15, 1, 2, 1, 3])
+    license_plate_options = set(lplate_search_cont.multiselect(
+        "Пошук за номером",
+        options=vehicles[VehicleJournalTable.LICENCE_PLATE].to_list()
+    ))
+
+
+    items_per_page = items_per_page_cont.selectbox(
+        "Кількість авто на сторінці",
+        index=0,
+        options=[10, 20, 50, 100, 200, 500]
+    )
+
     # print header of table
     sizes = [1] * len(display_columns)
     containers = st.columns(sizes)
@@ -242,7 +270,41 @@ def main():
     indexes = {c:i for i, c in enumerate(display_columns)}
 
     vehicles_data = vehicles[short_data_columns]
-    for _, row in vehicles_data.iterrows():
+
+    num_pages = len(vehicles_data) // items_per_page
+
+    for i in range(2):
+        page_prev.text('')
+    if page_prev.button("<", disabled=st.session_state.get('page', 0) <= 0):
+        current_page = st.session_state.get('page', 0)
+        st.session_state['page'] = max(0, current_page - 1)
+
+    for i in range(2):
+        page_next.text('')
+    if page_next.button(">", disabled=st.session_state.get('page', 0) >= num_pages):
+        current_page = st.session_state.get('page', 0)
+        st.session_state['page'] = min(num_pages, current_page + 1)
+
+    current_page = st.session_state.get('page', 0)
+
+    vehicles_data_filtered = vehicles_data
+    if len(license_plate_options) > 0:
+        vehicles_data_filtered = vehicles_data.loc[
+            vehicles_data[VehicleJournalTable.LICENCE_PLATE
+        ].isin(license_plate_options)]
+
+    for i in range(1):
+        page_num.text('')
+
+    page_from = max(0, current_page * items_per_page)
+    page_to = min(len(vehicles_data_filtered), (current_page + 1) * items_per_page)
+
+    page_num.write(f"Показано {page_from} - "
+                  f"{page_to} \n"
+                  f"з {len(vehicles_data_filtered)}")
+
+    vehicles_data_filtered = vehicles_data_filtered.iloc[page_from:page_to]
+    for _, row in vehicles_data_filtered.iterrows():
         idx = row[VehicleJournalTable.LICENCE_PLATE]
         containers = st.columns(sizes)
 
