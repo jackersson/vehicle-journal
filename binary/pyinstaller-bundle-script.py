@@ -70,7 +70,26 @@ def _install(cwd, installation_path):
     installation_path.mkdir()
 
     with tarfile.open(python_xztar) as f:
-        f.extractall(installation_path)
+        def is_within_directory(directory, target):
+            
+            abs_directory = os.path.abspath(directory)
+            abs_target = os.path.abspath(target)
+        
+            prefix = os.path.commonprefix([abs_directory, abs_target])
+            
+            return prefix == abs_directory
+        
+        def safe_extract(tar, path=".", members=None, *, numeric_owner=False):
+        
+            for member in tar.getmembers():
+                member_path = os.path.join(path, member.name)
+                if not is_within_directory(path, member_path):
+                    raise Exception("Attempted Path Traversal in Tar File")
+        
+            tar.extractall(path, members, numeric_owner=numeric_owner) 
+            
+        
+        safe_extract(f, installation_path)
 
     for f in ["LICENSE", PYMEDPHYS_BAT_NAME]:
         shutil.copy(data_path.joinpath(f), cwd.joinpath(f))
